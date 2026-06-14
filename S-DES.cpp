@@ -1,0 +1,387 @@
+//
+//  main.cpp
+//  S-DES
+//
+//  Created by David Sovann on 5/10/2025.
+//
+
+#include <iostream>
+#include <string>
+#include <bitset>
+#include <vector>
+#include <algorithm>
+
+using namespace std;
+
+// Permutation and S-boxes for S-DES
+const int P10[10] = {3, 5, 2, 7, 4, 10, 1, 9, 8, 6};
+const int P8[8] = {6, 3, 7, 4, 8, 5, 10, 9};
+const int IP[8] = {2, 6, 3, 1, 4, 8, 5, 7};
+const int IP_INV[8] = {4, 1, 3, 5, 7, 2, 8, 6};
+const int EP[8] = {4, 1, 2, 3, 2, 3, 4, 1};
+const int P4[4] = {2, 4, 3, 1};
+
+// S-Box table
+int S0[4][4] =
+{
+    {1, 0, 3, 2},
+    {3, 2, 1, 0},
+    {0, 2, 1, 3},
+    {3, 1, 3, 2}
+};
+
+int S1[4][4] =
+{
+    {0, 1, 2, 3},
+    {2, 0, 1, 3},
+    {3, 0, 1, 0},
+    {2, 1, 0, 3}
+};
+
+// Function prototypes
+string permute(const string &input, const int *permutation, int n);
+string leftShift(const string &input, int shifts);
+void generateKeys(const string &key, string &k1, string &k2);
+string f_function(const string &right, const string &subkey);
+string s_box(const string &input, int s_box_num);
+string xor_strings(const string &a, const string &b);
+string encrypt(const string &plaintext, const string &key);
+string decrypt(const string &ciphertext, const string &key);
+bool validateBinary(const string &input, int expected_length);
+
+int main()
+{
+    int choice;
+    string plaintext, ciphertext, key, result;
+    
+    cout << " S-DES Encryption/Decryption System " << endl;
+    
+    while (true)
+    {
+        cout << "\nMenu:" << endl;
+        cout << "1. Encryption" << endl;
+        cout << "2. Decryption" << endl;
+        cout << "3. Exit" << endl;
+        cout << "Enter your choice (1-3): ";
+        cin >> choice;
+        
+        switch (choice)
+        {
+            case 1:
+            {
+                cout << "\n ENCRYPTION " << endl;
+                cout << "Enter 8-bit plaintext (binary): ";
+                cin >> plaintext;
+                cout << "Enter 10-bit key (binary): ";
+                cin >> key;
+                
+                if (!validateBinary(plaintext, 8) || !validateBinary(key, 10))
+                {
+                    cout << "Error: Invalid input format! Please enter binary strings of correct length." << endl;
+                    break;
+                }
+                
+                string k1, k2;
+                generateKeys(key, k1, k2);
+                               
+                cout << "\nGenerated Subkeys:" << endl;
+                cout << "k1: " << k1 << endl;
+                cout << "k2: " << k2 << endl;
+                               
+                result = encrypt(plaintext, key);
+                cout << "Ciphertext: " << result << endl;
+                break;
+            }
+            
+            case 2:
+            {
+                cout << "\n DECRYPTION " << endl;
+                cout << "Enter 8-bit ciphertext (binary): ";
+                cin >> ciphertext;
+                cout << "Enter 10-bit key (binary): ";
+                cin >> key;
+                
+                if (!validateBinary(ciphertext, 8) || !validateBinary(key, 10))
+                {
+                    cout << "Error: Invalid input format! Please enter binary strings of correct length." << endl;
+                    break;
+                }
+                
+                string k1, k2;
+                generateKeys(key, k1, k2);
+                                
+                cout << "\nGenerated Subkeys:" << endl;
+                cout << "k1: " << k1 << endl;
+                cout << "k2: " << k2 << endl;
+                                
+                result = decrypt(ciphertext, key);
+                cout << "Plaintext: " << result << endl;
+                break;
+            }
+            
+            case 3:
+                return 0;
+            
+            default:
+                cout << "Invalid choice! Please enter 1, 2, or 3." << endl;
+        }
+    }
+    
+    return 0;
+}
+
+/* Permutation function to permute each character in the input string
+ input is the string to be permute
+ permutation is the permutation table to use
+ n is the length of the permutation table
+ */
+string permute(const string &input, const int *permutation, int n)
+{
+    //create a result string with all 0
+    string result(n, '0');
+    
+    //apply the permutation to each character in the input string
+    for (int i = 0; i < n; i++)
+    {
+        //result at index i is the input index at permutaion index - 1 position
+        result[i] = input[permutation[i] - 1];
+    }
+    return result;
+}
+
+/* Left shift function to shift the input binary number position */
+
+string leftShift(const string &input, int shifts)
+{
+    string result = input;
+    
+    // left shift the string by the number of position, by the outer loop start at 0 till shift number
+    for (int i = 0; i < shifts; i++)
+    {
+        char first = result[0];
+        
+        //inner loop start at 0 till the input or result length
+        for (int j = 0; j < result.length() - 1; j++)
+        {
+            // make the result at posion j to j+1
+            result[j] = result[j + 1];
+        }
+        
+        // make the last number of result become the first in index position
+        result[result.length() - 1] = first;
+    }
+    return result;
+}
+
+/* Key generation function to generate key for the S-DES
+ key is the input key
+ k1 is the first generate key
+ k2 is the second generate key
+ */
+void generateKeys(const string &key, string &k1, string &k2)
+{
+    // Apply P10 permutation to permute function
+    string p10_result = permute(key, P10, 10);
+    
+    // Split into left and right halves, left halves start at index 0 with size = 5 and right halves start at index 5 with size = 5
+    string left = p10_result.substr(0, 5);
+    string right = p10_result.substr(5, 5);
+    
+    // Left shift by 1 for both halves
+    left = leftShift(left, 1);
+    right = leftShift(right, 1);
+    
+    // Combine and apply P8 to get K1
+    string combined = left + right;
+    k1 = permute(combined, P8, 8);
+    
+    // Left shift by 2 for both halves
+    left = leftShift(left, 2);
+    right = leftShift(right, 2);
+    
+    // Combine and apply P8 to get K2
+    combined = left + right;
+    k2 = permute(combined, P8, 8);
+}
+
+/* XOR operation for two binary strings
+ a is the first binary string
+ b is the second binary string
+ */
+string xor_strings(const string &a, const string &b)
+{
+    // Create the result string with all 0
+    string result(a.length(), '0');
+    
+    // Using for loop start at 0 till first binary string length
+    for (size_t i = 0; i < a.length(); i++)
+    {
+        // Check if the first and second binary string position is the same then return 0, else return 1
+        result[i] = (a[i] == b[i]) ? '0' : '1';
+    }
+    return result;
+}
+
+/* S-Box function operate on the input string
+ s_box_num is the number of the box id be use 0 or 1
+ */
+
+string s_box(const string &input, int s_box_num)
+{
+    // Convert the input string to 2 bits binary format
+    int row = (input[0] - '0') * 2 + (input[3] - '0');
+    int col = (input[1] - '0') * 2 + (input[2] - '0');
+    
+    int value;
+    // Apply S-box base on the S-box number
+    if (s_box_num == 0)
+    {
+        value = S0[row][col];
+    }
+    else
+    {
+        value = S1[row][col];
+    }
+    
+    // Convert the result back to 2-bit binary string using bitwise &
+    string result = "";
+    
+    if (value & 0x02) // Compare value with 000010 in binary of 2 and 0x02 is hexadimal of 2
+    {
+        result += '1';
+    }
+    else
+    {
+        result += '0';
+    }
+    
+    if (value & 0x01) // Compare value with 000001 in binary of 1 and 0x01 is hexadimal of 1
+    {
+        result += '1';
+    }
+    else
+    {
+        result += '0';
+    }
+    
+    return result;
+}
+
+/* F function used in the Feistel network
+ right is the of input string
+ */
+string f_function(const string &right, const string &subkey)
+{
+    // Expansion/Permutation on the right input string
+    string expanded = permute(right, EP, 8);
+    
+    // XOR with subkey
+    string xored = xor_strings(expanded, subkey);
+    
+    // Split into 2 of 4-bit halves, the left subtract start at index 0 with size = 4, and right start at index 4 with size = 4
+    string left_half = xored.substr(0, 4);
+    string right_half = xored.substr(4, 4);
+    
+    // Apply S-Boxe for each halves
+    string s0_output = s_box(left_half, 0);
+    string s1_output = s_box(right_half, 1);
+    
+    // Combine S-Box outputs
+    string combined = s0_output + s1_output;
+    
+    // Apply P4 permutation to get final output
+    return permute(combined, P4, 4);
+}
+
+/* Encryption function
+ plaintext is the input binary string
+ key is the input 10 bits binary
+ */
+string encrypt(const string &plaintext, const string &key)
+{
+    string k1, k2;
+    // Genetate keys froom the given key
+    generateKeys(key, k1, k2);
+    
+    // Apply initial permutation to the plaintext
+    string ip_result = permute(plaintext, IP, 8);
+    
+    // Split into left and right halves
+    string left = ip_result.substr(0, 4);
+    string right = ip_result.substr(4, 4);
+    
+    // Round 1 apply the right halves with k1 to f-function and find the new right halve using XOR of the left halve with result from the f-function for encryption
+    string f_result = f_function(right, k1);
+    string new_right = xor_strings(left, f_result);
+    
+    // Swap the the old right halve with the new right and left halve with the old right halve
+    string temp = right;
+    right = new_right;
+    left = temp;
+    
+    // Round 2 apply the right halve with k2 to f-function and find the new right havle using XOR of the left havle with result from the f-function for encryption
+    f_result = f_function(right, k2);
+    new_right = xor_strings(left, f_result);
+    
+    // Combine after final round, no swap after last round
+    string combined = new_right + right;
+    
+    // Apply inverse initial permutation to get ciphertext
+    return permute(combined, IP_INV, 8);
+}
+
+// Decryption function
+string decrypt(const string &ciphertext, const string &key)
+{
+    string k1, k2;
+    // Genetate keys froom the given key
+    generateKeys(key, k1, k2);
+    
+    // Apply initial permutation to the ciphertext
+    string ip_result = permute(ciphertext, IP, 8);
+    
+    // Split into left and right halves
+    string left = ip_result.substr(0, 4);
+    string right = ip_result.substr(4, 4);
+    
+    // Round 1 apply the right halve and k2  to f-function and find the new right halve using XOR of the left halve with result from the f-function fro decryption
+    string f_result = f_function(right, k2);
+    string new_right = xor_strings(left, f_result);
+    
+    // Swap the old right with the new right and left havle with the old right halve
+    string temp = right;
+    right = new_right;
+    left = temp;
+    
+    // Round 2 apply the right havle with k1 to f-function and find the new right havle using XOR of the left havle with result from the f-function for decryption
+    f_result = f_function(right, k1);
+    new_right = xor_strings(left, f_result);
+    
+    // Combine after final round
+    string combined = new_right + right;
+    
+    // Apply inverse initial permutation to get plaintext
+    return permute(combined, IP_INV, 8);
+}
+
+// Input validation function
+bool validateBinary(const string &input, int expected_length)
+{
+    // Check if the input length and expected length is not equal then return false
+    if (input.length() != expected_length)
+    {
+        return false;
+    }
+    
+    // Using for loop to loop from start index of input till end
+    for (char c : input)
+    {
+        // Check if it not 0 and 1, return false
+        if (c != '0' && c != '1')
+        {
+            return false;
+        }
+    }
+    
+    return true;
+}
